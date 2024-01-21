@@ -1,0 +1,24 @@
+https://pan.baidu.com/s/1MKzo24RTxiJGcjTJBHxcqA#list/path=%2F
+
+
+方案设计
+时间片轮询法系统调度
+基于优先级的系统调度
+任务堆栈
+任务优先级
+任务上下文切换
+
+调度表：
+任务表，任务时间，执行时间
+调度表之间的调度
+
+step
+先调度2个任务：
+task1 10ms运行一次，执行2ms
+task2 20ms运行一次，执行2ms
+
+
+I2C驱动原理
+SCL
+SDA
+开始传输
