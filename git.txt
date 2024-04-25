@@ -1,0 +1,21 @@
+git remote -v
+git branch
+
+
+
+git push origin HEAD:refs/for/<dest branch>
+
+
+CX1E
+br_develop_mcu_adcu25_integration
+
+ADCU
+
+
+UT
+br_ut_test
+
+
+
+userMain
+hz_main

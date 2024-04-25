@@ -1,0 +1,14 @@
+MCU programm remark
+
+10pin-DAP connector
+
+1. PFLASH 16MB  program flash
+0x8000000 - 0x80FFFFFF    16^6 5*3MB + 1*1MB
+2. DF_EEPROM   1MB (data flash 0) for emulate e2prom
+0xAF000000 - 0xAF0FFFFFF  16^5 
+3. DF1   (12KB data flash 1) e2prom for HSM
+0xAFC00000 - 0xAFC1FFFF 
+4. DF_UCBS 24KB (data flash 0) UCB 
+user configuration block  
+UCB 512B * 48  erase max 100times all max 500times
+0xAF400000 - 0xAF405FFF 
