@@ -1,0 +1,1323 @@
+状态机实现结构
+{
+	1. action表
+	进入动作
+	运行动作
+	退出动作
+
+	2. event 表
+	event id
+	当前状态
+	下一个状态
+
+	3. 状态机控制结构
+	状态切换标志
+	事件总数
+	动作总数
+	当前状态
+	下一个状态
+	action表
+	event表
+
+
+	初始化状态机
+	状态机转换函数
+	状态机动作执行函数 执行当前状态的退出动作，执行下一个状态的进入动作
+
+	时刻：动作发生时刻，类似于中断，触发某个事件的时间，改变事件/状态的标志位，触发该事件的退出和进入动作，执行接下来一段时间的action即task
+	时间长度：持续发生的动作，类似于task：while(1)
+
+	系统描述
+	系统构成
+	1. 输入信息
+	a. 每组输入的信息，有对应的状态，是否读取完成，读取失败等
+	b. 系统输入抽象，将数据分类或处理，给系统提供可识别或可使用的类型
+	2. 系统处理
+	a. 根据输入的类型，进行状态机管理
+	b. 状态机控制，到达某个事件，进行对用的动作操作（退出上一状态，进入下一状态，执行对应task）
+	c. 对应task更新输出的信息状态，对输出系统进行通知
+	3. 输出信息
+	a. 提供输出信息的对应方法，根据信息分类输出
+	4. 系统的运行管理
+	a. 输入信息系统运行
+	b. 系统处理运行
+	c. 输出系统运行
+  
+  系统架构
+  1. 运行系统由多个子系统构成，分类：
+  {数据输入及处理系统，逻辑处理系统，数据输出系统}
+  2. 运行系统的运行状态应包括
+  {数据初始化，系统运行，系统等待 等}
+  3. 系统运行状态下，应满足单一处理原则，即子系统仅处理一次数据，关联系统应根据上游系统的处理状态执行对应的策略
+  4. 数据输入及处理系统中，应对某些状态进行监控，如有异常，可上报故障
+  5.子系统之间通过API通讯，需采取对象模型，即结构体，对接口进行缩减，减少必要开支
+  6. 如发生状态切换，运行系统应能提供日志以供参考
+}
+
+
+
+autosar os 知识点
+{
+	内容概要
+  {
+		1. scheduler + time protection 超时+ memory protection 异常访问
+		2. single core , multi core
+		3. os app
+		4. task management
+		5. interrupt management
+		6. timer
+		7. scheduler
+		8. resource
+		9. memory, timing protection
+		10. stack
+    11. spin lock 自旋锁
+	}
+  基本作用
+  {
+    改变各任务的执行频率；
+    改变各任务的执行时间；
+    设定各任务的优先级，保证高优先级任务能够及时执行；
+    任务切换时的现场保护与恢复；
+    共享资源的安全访问机制等；
+  }
+  Os_元素分级组成
+  {
+    Os_Core
+    {
+      Core
+      {
+      
+      }
+      Scheduler
+      Os_App
+      Stack
+      Hook
+      Apps
+      Resource
+      HwConfig
+      Barrier
+      Isr
+    }
+    Os_App
+    {
+      Task
+      Isr
+      Cat1Isr
+      Counter
+      Alarm
+      SchT
+      Service
+      Hook
+      Trace
+    }
+    Os_Task
+    {
+      Thread
+      {
+        contextConfig
+        context
+        Stack
+      }
+      Priority
+      TaskId
+      AutostartModes
+    }
+    Os_Hook
+    {
+      Hook
+      {
+        Thread
+        {
+          
+        }
+        HookTypeFlag
+        Id
+        TaskReturn
+      }
+      Callback
+    }
+  }
+  OS application
+  {
+    组成元素
+    {
+      1. Task
+      {
+        状态
+        {
+          运行状态(Running)
+          就绪状态(Ready)
+          阻塞状态(Suspend)
+          等待状态(Waiting)
+        }
+        调度策略
+        {
+          完全抢占式：全部可抢占
+          非抢占式
+          混合抢占式：部分task可抢占
+        }
+        task切换时，需要释放共享资源权限
+        共享资源
+        {
+          
+        }
+      }
+      2. ISR
+      {
+        分类
+        {
+          Category I：
+          此类中断服务程序不能够使用OS提供的系统服务，当中断执行完成之后则会重新跳转至产生中断的地方继续执行，不会影响到任务的执行
+          Category II：
+          该类中断则可以调用OS系统服务，如激活任务或者设置事件等
+        }
+      }
+      3. Alarm
+      {
+        可以激活一个任务，设定一个event，调用callback或者增加计数器等功能，但只能是一对一
+      }
+      4. ScheduleTable
+      {
+        元素
+        {
+          Expiry point: activate at least one Task OR set at least one event
+          Expiry point同时设定多个Task或者多个Event
+        }
+        调度方式
+        {
+          单次执行(Single-Shot)
+          循环执行(Repeating)
+        }
+        Expiry Point优先激活Task，随后设置Event
+      }
+      5. Counter
+      {
+        驱动alarm, ScheduleTable
+        多个alarm可以共用一个Counter, 1个ScheduleTable只能用1个Counter驱动
+        分类
+        {
+          Hardware Counter:由硬件外设驱动，GPT, timer
+          Softwart Counter:调用API函数IncrementCounter实现，+1
+        }
+        关系
+        {
+          timer 提供硬件驱动计数器，为counter提供计数
+          counter到达某个阈值时，触发alarm 或 expiry point
+          alarm对应某个event或激活task或调用callback，会置位对应evnet的ev标志
+          scheduleTable，expiry point对应某个task，event，会置位激活某个task，或置位某个event的ev标志位
+        }
+      }
+    }
+    分类
+    {
+      Trusted OS-Applications 
+      Non-Trusted OS-Applications
+    }
+    状态
+    {
+      APPLICATION_ACCESSIBLE
+      APPLICATION_RESTARTING
+      APPLICATION_TERMINATED
+    }
+  }
+  protection
+  {
+    Memory protection
+    {
+      Stack： Task ISR
+      Data:
+      Code:
+      MPU memory protection unit
+      {
+      
+      }
+    }
+    Timing protection
+    {
+      Execution Budget:task, ISR execution duration 
+      Lock Budget: resource is locked for lock-time duration
+      Time Frame: interval time duration during tasks 
+    }
+    Service protection
+    {
+      with an invalid handle or out of range value.
+      in the wrong context
+      fails to make an API call
+      impacts on the behaviour of every other OS-Application in the system
+      manipulate Operating System objects that belong to another OS-Application 
+    }
+  }
+  Resource Management
+  {
+    spin lock 自旋锁
+    {
+    
+    }
+  }
+  
+  start core 启动过程
+  {
+  main()
+    Os_InitMemory();
+    
+    Os_Init()
+    {
+      Os_Api_Init()
+      {
+        Os_Hal_CoreInitHardware()
+        Os_SystemInterruptHandlingInit()
+        Os_MpSystemInit()
+        
+        Os_CoreEmulateMaster()启动master core：以此唤醒其他core
+        Os_SystemInit()
+      }
+    }
+    
+    EcuM_Init()
+    {
+      EcuM_StartOS()
+      {
+        多核启动，对每个核调用StartCore
+        StartCore() 启动核
+        {
+          Os_TrapCallStartCore()
+          {
+            Os_Api_StartCore()
+            {
+              if(core == autostart)
+              OsCfg_CoreBootBarrierRefs.waitingsign = start 
+              设置等待信号，等待其他核启动完成，第一个等待同步点
+              else
+              Os_Hal_CoreStart()
+            }
+          }
+        }
+        每个核都完成核启动，并设置了等待信号 1次同步
+        StartOS() 启动操作系统，操作系统位于多核之上，可操控所有核上运行的thread
+        {
+          Os_TrapCallStartOS()
+          {
+            Os_Api_StartOS()
+            {
+              获取当前核
+              获取当前asr核
+              hook = OsCfg_Hook_Os_CoreInitHook_OsCore0
+              Os_HookCallOs_CoreInitHook(hook) 
+              {
+                hookthread = OsCfg_Hook_Os_CoreInitHook_OsCore0.hook.thread
+                将线程初始化一次，此处将Entry初始化到Lr
+                Os_ThreadInit(hookthread)
+                {
+                  Os_Hal_ContextInit(contextconfig, context)
+                  {
+                    Os_Hal_ContextIntInitializeReserved(contextconfig, context)
+                    Os_Hal_ContextIntInitialize(contextconfig, context)
+                    {
+                      Os_Hal_ContextIntPrepareCSAContent(contextconfig, context)
+                      {
+                        Context->PreviousContextInfo = Os_Hal_Mfcr(OS_HAL_PCXI_OFFSET);
+                        Context->RunningPCXI = Os_Hal_Mfcr(OS_HAL_PCXI_OFFSET);
+                        Context->Lr = CurrentConfig->Entry;
+                        Context->Pprs = CurrentConfig->ProtectionSet;  
+                      }
+                    }
+                  }
+                }
+                Os_ThreadStartFirst(next=hookthread)
+                {
+                  设置下一个进程为hookthread
+                  Os_CoreSetThread(hookthread)
+                  恢复硬件上下文，切换进入到hookthread
+                  hookthread.Context = OsCfg_Hal_Context_Os_CoreInitHook_OsCore0_Dyn
+                  Os_Hal_ContextFirstResume(hookthread.Context) 开始hookthread
+                  {
+                    保存当前中断状态，清除CSA，复原中断，复原下一个线程上下文
+                    Os_Hal_ContextIntRestore(next thread)
+                    {
+                      切换到下一个线程,进入钩子函数
+                      Os_Hal_ContextIntGo()
+                      
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        切换到钩子函数，进入钩子函数
+        OsCfg_Hal_Context_Os_CoreInitHook_OsCore0.Entry = Os_HookWrapperOs_CoreInitHook()
+        {
+          hook = OsCfg_Hook_Os_CoreInitHook_OsCore0
+          Os_Hook2InitHook(hook)->Callback(mode);
+          OsCfg_Hook_Os_CoreInitHook_OsCore0.callback = Os_CoreInitHook
+          Os_CoreInitHook()
+          {
+            Os_CoreInit()
+            {
+              初始化
+              {
+                Os_ResourceInit()
+                Os_IocInit()
+                
+                kernelapp = OsCfg_App_SystemApplication_OsCore0
+                Os_AppInit(kernelapp)
+                {
+                  对核内每个Task进行一次初始化
+                  {
+                  task = OsCfg_App_SystemApplication_OsCore0.taskRefs[index]
+                  Os_TaskInit(task)
+                  {
+                    taskThread = task.thread
+                    Os_TaskInternalInit(task)
+                    {
+                      将task.thread赋值
+                      Os_ThreadInit(task.thread)
+                      {
+                        将task.thread.ContextDyn赋值
+                        Os_Hal_ContextInit(Thread->ContextConfig, Thread->Context)
+                        {
+                          Os_Hal_ContextIntInitializeReserved(contextconfig, context)
+                          Os_Hal_ContextIntInitialize(contextconfig, context)
+                          {
+                            Os_Hal_ContextIntPrepareCSAContent(contextconfig, context)
+                            {
+                              把每个Task.thread.ContextDyn都初始化赋值
+                              Context->PreviousContextInfo = Os_Hal_Mfcr(OS_HAL_PCXI_OFFSET);
+                              Context->RunningPCXI = Os_Hal_Mfcr(OS_HAL_PCXI_OFFSET);
+                              Lr进行Entry分配
+                              Context->Lr = CurrentConfig->Entry;
+                              Context->Pprs = CurrentConfig->ProtectionSet;  
+                            }
+                          }
+                        }
+                      }
+                    }
+                    如果任务autostart设置，则设置该任务状态为Ready，插入调度表
+                    if(task.autostartMode == OS_APPMODE_ANY)
+                    {
+                      Os_TaskSetState(Task, READY)
+                      调度表插入该任务
+                      OsCfg_Task_Default_Init_Task.HomePriority = 0
+                      该任务优先级最高，为下一个进行的任务，TaskInit已经完成Lr的分配，此处设置下一个任务为defaultinitTask,contextswitch时将调用Os_Task_Appl_Task_0_Core0该Task
+                      Os_SchedulerInsert(Task)
+                      {
+                        taskHomePriority = Task.HomePriority
+                        Os_DequeEnqueue()
+                        Os_TaskInitRoundRobinCounter()
+                        计入bit数组--ready task队列
+                        Os_BitArraySetBit()
+                        如果插入任务优先级更高
+                        Scheduler->Dyn->NextTask = Task;
+                        Scheduler->Dyn->NextPriority = taskHomePriority; 
+                      }
+                    }
+                  }
+                  }
+                  Os_IsrInit()
+                  Os_CounterInit()
+                  Os_AlarmInit()
+                  Os_SchTInit()
+                  Os_AppServicesInit()
+                  Os_AppHooksInit()
+                }
+                Os_XSigInit()
+                Os_BarrierAttachUserBarrier() 完成app初始化后
+              }
+              
+              start timing protection
+              Os_TpStart()
+              
+              启动
+              {
+                Os_HookCallCallback(StartupHookRef): system  startupHook
+                每个核启动startuphook
+                Os_HookCallCallback(StartupHookRef): app     startupHook
+                启动应用
+                Os_AppStart(KernelApp): Start kernel app
+                每个核启动应用
+                Os_AppStart(KernelApp)
+                {
+                  Os_CounterStart() 
+                }
+                Os_AppStart(): Start app 启动app counter
+              }
+              Os_BarrierSynchronizeInternal()启动所有APP，第二次同步点
+            }
+          }
+          
+          恢复上一个线程
+          当前还在此钩子函数 OsCfg_Hook_Os_CoreInitHook_OsCore0
+          Os_TrapHookReturn()
+          {
+            Os_HookReturn（）
+            {
+              
+              taskReturn = OsCfg_Hook_Os_CoreInitHook_OsCore0.Os_HookTaskReturn_BeginScheduling
+              switch(taskReturn)
+              {
+                开始调度
+                Os_TaskBeginScheduling()
+                {
+                  idleTask = Os_CoreGetIdleTask(currentCore)
+                  nextTask = idleTask
+                  scheduler = Os_TaskGetScheduler(idleTask)
+                  如果当前有高优先级任务--下个任务不是当前task
+                  nextTask = Os_SchedulerInternalSchedule(scheduler)
+                  Os_ThreadSwitch()
+                  由于已经将下一个任务设置成default init Task，context Lr已经分配到Os_Task_Appl_Task_0_Core0，将执行该Task，后续执行EcuM_StartupTwo()
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  任务切换
+  {
+    ActivateTask()
+    {
+      Os_TrapCallActivateTask()
+      {
+        Os_Api_ActivateTask() / Os_Api_Schedule()
+        {
+          Os_TaskSwitch()
+          {
+            Os_ThreadSwitch()
+            {
+              Os_StackOverflowCheck()
+              Os_ThreadStoreFpuContext()
+              Os_TpSwitch()
+              Os_MpSwitch()
+              Os_CoreSetThread(nextThread)
+              Os_Hal_ContextSetUserMsrBits()
+              
+              Os_Hal_ContextSwitch()
+              {
+                Os_Hal_ContextIntSave(currentContext)
+                Os_Hal_ContextIntRestore(nextContext)
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    上下文切换原理
+    {
+      寄存器功能
+      TC397运行原理
+      {
+        PC指针
+      }
+      
+    }
+  }
+  Task
+  {
+    basic Task
+    {
+      所有包含的runnable依次执行一次，terminateTask()结束并切换
+    }
+    extend Task
+    {
+      等待该Task中某个事件发生，如果发生，则运行对应事件的Runnable
+      for(;;)
+      waitEvent
+      GetEvent
+      ClearEvent
+      Runnable()
+    }
+  }
+  Task类型的定义规则
+  {
+    basic task
+    extend task
+  }
+  
+  Timer -> Task 是如何实现的
+  {
+    STM timer作为Os HardwareTimer的硬件驱动 
+    timer是硬件提供的，counter是软件提供
+    Timer -> Counter -> Alarm / Schedule Table -> Task / Event 
+    Timer 和 Counter 关系
+    {
+      STM 100MHZ = 0.00000001s/tick，如果task周期为10ms = 1000 * 10ns 即1000个tick
+      Counter 记录当前tick和到达tick，进行比较
+    }
+    Counter -> Alarm
+    {
+      当counter到达阈值时，通过中断能执行对应的Alarm
+      {
+        Os_Isr_Os_TimerHrtIsr(),用于执行到期的Job
+        {
+          Os_CounterWorkJobs() !!!!!!!!!
+          {
+            job = Os_PriorityQueueTopGet(jobQueue)
+            Os_JobDo(job) 
+          }
+        }
+      }
+      Job是如何被放置队列的，队列保存的Job是何时定义的
+      {
+        SetRelAlarm()->Os_CounterAddRelJob()->Os_PriorityQueueInsert()
+        Rte_Start()中，初始化所有的alarm，即将所有的任务加入到队列，等counter到达阈值则执行调用，Alarm.Job会被加入到队列中
+      }
+      
+    }
+
+    os counter 是如何轮询被调用的
+    {
+      STM将timer的数值递增，会触发Os_Isr_Os_TimerHrtIsr()中断
+    }
+    Alarm -> Event
+    {
+      Alarm.Job.callback = Os_AlarmActionSetEvent()
+      Os_AlarmActionSetEvent() -> Os_EventSetInternal()
+    }
+    Alarm -> Task
+    {
+      Alarm.Job.callback = Os_AlarmActionActivateTask()
+      Os_AlarmActionActivateTask() -> Os_TaskActivateTaskInternal()
+    }
+    Counter -> SchT
+    {
+      SchM调度表开启
+      SchM_StartTimingCore0()->StartScheduleTableRel()->Os_Api_StartScheduleTableRel() ->Os_SchTStartScheduleTableRel() ->Os_SchTStartRelative()->Os_JobAddRel(){把SchT.Job添加到队列中},Os_SchTReinit()
+    }
+    SchT -> Task
+    {
+      SchT.Job.callback = Os_SchTWorkScheduleTable()
+      Os_SchTWorkScheduleTable() -> Os_SchTExPoWorkAction() -> for(task)Os_TaskActivateTaskInternal()
+    }
+    
+    
+  }
+  Task , Event 关系与区别
+  {
+    WaitEvent：    只要表达式中任意一个EVENT 被收到，Task state则切换至Ready， 等待调度表按照优先级进行调度
+    SetEvent：    为指定的Task 设置Event
+    GetEvent：    获取指定Task当前接收到的所有EVENT
+    ClearEvent：    当Event被Task处理完成之后，需要进行Clear
+  }
+  多核OS启动 
+  {
+    主从模式
+    StartOs 同步所有核2次，第一次在startupHook前，第二次在OS启动了startuphook
+    后，scheduler开始前
+  }
+  多核OS关闭
+  {
+  
+  }
+  多核OS调度
+  {
+    全调度和拒绝调度模式
+    因此在任务分配优先级的过程中，应当将起到关键作用的重要任务分配较高的优先级，重要程度类似的任务周期越短，分配的优先级越高
+  }
+  IOC 核间通信
+  {
+    每当不同内核中的用用程序需要进行数据交互时，操作系统就需要开辟单独的内存区域，通信双方可以实现该内存区域的读写，从而完成数据的传输
+    在使用IOC的过程中如果应用程序对这一共享内存区域进行读写时，会申请占用一个自旋锁(SpinLock),以防止被其他内核的应用程序同时访问，这样便可以保证核间数据读写的一致性
+    Send-Receiver模型
+    {
+    接收端实体被周期性调用通过Rte_Receive从RTE接收来自Core0的数据；
+    发送端调用函数Rte_Send函数发送数据，进而调用Ioc_Send函数写入数据到Buffer中；
+    接收端便会通过Ioc_Read函数读取共享内存中的Buffer数据，并传递给到Rte_Read函数中供Core1中的SW-C使用。
+    }
+    Client-Server模型
+    {
+      发送端调用函数Rte_Call函数进而调用函数IocSend函数，将数据写入IOC内部队列缓存中；
+      Rte_Call函数使用OS调用激活接受从核的服务任务来通知接收端；
+      接收端被激活的该任务将负责调用IocReceive函数从IOC共享内存Buffer中读取数据并将数据传输至服务端的运行实体中；
+
+      Core1中服务函数的结果会被反向传输至Core0的客户端中
+    }
+    跨核swc通讯时，使用RTE_CALL函数调用并通知服务端进行处理
+    服务端通过另一组函数将数据返回
+    定期执行的事件可以通过scheduleTable实现
+    触发事件如注册服务等，未预期的行为需要alarm触发事件
+    RTC_CALL是利用IOC的函数进行事件置位
+    调度表可实现同事触发不同核的多个任务
+  }
+  
+  定时器通过ISR触发counter增加
+  STM0TIMER 会每个tick触发一次counter增加
+  如果counter到达某个阈值，触发对应的alarm或schT，如何实现
+  counter是如何部署在对应的task或alarm
+  ISR定义在哪里
+  {
+  
+  }
+  
+  OS配置
+  OS_Core_Lcfg
+  {
+    
+    /*! Core configuration data: OsCore0 */
+    CONST(Os_CoreAsrConfigType, OS_CONST) OsCfg_Core_OsCore0 =
+    {
+      /* .Core                 = */
+      {
+        /* .Status               = */ OS_CORE_CASTSTATUS_COREASRSTATUS_2_CORESTATUS(OsCfg_Core_OsCore0_Status_Dyn),
+        /* .HwConfig             = */ &OsCfg_Hal_Core_OsCore0,
+        /* .InterruptSourceRefs  = */ OsCfg_Hal_Core_OsCore0_InterruptSourceRefs,
+        /* .InterruptSourceCount = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_INTERRUPTSOURCEREFS,
+        /* .Id                   = */ OS_CORE_ID_0,
+        /* .Trace                = */ NULL_PTR,
+        /* .IsAsrCore            = */ TRUE,
+        /* .IsAutostart          = */ TRUE,
+        /* .IsMasterStartAllowed = */ TRUE,
+        /* .HasPrivilegedHardwareAccess = */ TRUE
+      },
+      /* .Dyn                  = */ &OsCfg_Core_OsCore0_Dyn,
+      /* .Scheduler            = */ &OsCfg_Scheduler_OsCore0,
+      /* .IdleTask             = */ &OsCfg_Task_IdleTask_OsCore0,
+      /* .KernelApp            = */ &OsCfg_App_SystemApplication_OsCore0,
+      /* .KernelStack          = */ &OsCfg_Stack_OsCore0_Kernel,
+      /* .PreStartTask         = */ NULL_PTR,
+      /* .PreStartTaskCallback = */ NULL_PTR,
+      /* .StartupHookRef       = */ NULL_PTR,
+      /* .ShutdownHookRef      = */ &OsCfg_Hook_ShutdownHook_OsCore0,
+      /* .ErrorHookRef         = */ &OsCfg_Hook_ErrorHook_OsCore0,
+      /* .ProtectionHookRef    = */ &OsCfg_Hook_ProtectionHook_OsCore0,
+      /* .InitHookRef          = */ &OsCfg_Hook_Os_CoreInitHook_OsCore0,
+      /* .HookRefs             = */ OsCfg_Core_OsCore0_HookRefs,
+      /* .HookCount            = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_HOOKS,
+      /* .AppRefs              = */ OsCfg_Core_OsCore0_AppRefs,
+      /* .AppCount             = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_APPS,
+      /* .ResourceRefs         = */ OsCfg_Core_OsCore0_ResourceRefs,
+      /* .ResourceCount        = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_RESOURCES,
+      /* .HwConfig             = */ &OsCfg_Hal_CoreAsr_OsCore0,
+      /* .MemoryProtection     = */ &OsCfg_Mp_OsCore0,
+      /* .TimingProtection     = */ NULL_PTR,
+      /* .StackRefs            = */ OsCfg_Core_OsCore0_StackRefs,
+      /* .StackCount           = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_STACKS,
+      /* .CoreIdx              = */ OS_COREASRCOREIDX_0,
+      /* .XSignal              = */ &OsCfg_XSig_OsCore0,
+      /* .IocRefs              = */ OsCfg_Core_OsCore0_IocRefs,
+      /* .IocCount             = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_IOCS,
+      /* .Barrier              = */ &OsCfg_Barrier_OsCore0,
+      /* .BarrierRefs          = */ OsCfg_Core_OsCore0_BarrierRefs,
+      /* .BarrierCount         = */ (Os_ObjIdxType)OS_CFG_NUM_BARRIERS,
+      /* .ThreadClass          = */ &OsCfg_Core_OsCore0_ThreadClass,
+      /* .IsrRefs              = */ OsCfg_Core_OsCore0_IsrRefs,
+      /* .IsrCount             = */ (Os_ObjIdxType)OS_CFG_NUM_CORE_OSCORE0_ISRS
+    }
+    ;
+  }
+  OS_App
+  {
+    /*! Application configuration data: SystemApplication_OsCore0 */
+    CONST(Os_AppConfigType, OS_CONST) OsCfg_App_SystemApplication_OsCore0 =
+    {
+      /* .Dyn                  = */ &OsCfg_App_SystemApplication_OsCore0_Dyn,
+      /* .Core                 = */ &OsCfg_Core_OsCore0,
+      /* .AccessRightId        = */ OS_APPID2MASK(SystemApplication_OsCore0),
+      /* .TaskRefs             = */ OsCfg_App_SystemApplication_OsCore0_TaskRefs,
+      /* .TaskCount            = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_TASKS,
+      /* .IsrCat2Refs          = */ OsCfg_App_SystemApplication_OsCore0_IsrRefs,
+      /* .IsrCat2Count         = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_ISRS,
+      /* .IsrCat1Refs          = */ OsCfg_App_SystemApplication_OsCore0_Cat1IsrRefs,
+      /* .IsrCat1Count         = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_CAT1ISRS,
+      /* .CounterRefs          = */ OsCfg_App_SystemApplication_OsCore0_CounterRefs,
+      /* .CounterCount         = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_COUNTERS,
+      /* .AlarmRefs            = */ OsCfg_App_SystemApplication_OsCore0_AlarmRefs,
+      /* .AlarmCount           = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_ALARMS,
+      /* .SchTRefs             = */ OsCfg_App_SystemApplication_OsCore0_SchTRefs,
+      /* .SchTCount            = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_SCHTS,
+      /* .ServiceFunctions     = */ OsCfg_App_SystemApplication_OsCore0_ServiceRefs,
+      /* .ServiceFunctionCount = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_SERVICES,
+      /* .StartupHookRef       = */ NULL_PTR,
+      /* .ShutdownHookRef      = */ NULL_PTR,
+      /* .ErrorHookRef         = */ NULL_PTR,
+      /* .HookRefs             = */ OsCfg_App_SystemApplication_OsCore0_HookRefs,
+      /* .HookCount            = */ (Os_ObjIdxType)OS_CFG_NUM_APP_SYSTEMAPPLICATION_OSCORE0_HOOKS,
+      /* .TraceAppl            = */ &OsCfg_Trace_SystemApplication_OsCore0,
+      /* .RestartTask          = */ NULL_PTR,
+      /* .IsTrusted            = */ TRUE,
+      /* .IsPriveleged         = */ TRUE,
+      /* .HasTimingProtectionDelay = */ FALSE,
+      /* .Id                   = */ SystemApplication_OsCore0
+    };
+  }
+}
+
+CPU 寄存器
+{
+  指令寄存器（Instruction Register, IR）：存储当前正在执行的指令。
+  程序计数器（Program Counter, PC）：存储下一条要执行的指令的地址。
+  地址寄存器（Address Register, AR）：存储操作数或数据的内存地址。
+  数据寄存器（Data Register, DR）：存储要处理的数据或指令结果。
+  累加寄存器（Accumulator, AC）：用于累积操作结果，如算术运算。
+  程序状态字寄存器（Program Status Word, PSW）：存储程序状态信息，如条件标志位。
+  通用寄存器（General Purpose Registers）：用于存储临时数据和计算结果。
+  标志寄存器（Flags Register）：存储各种状态标志，如零标志、符号标志等。
+  段寄存器（Segment Registers）：在x86架构中，用于指定不同内存段的基址。
+  控制寄存器（Control Registers）：存储CPU的控制和状态信息。
+  调试寄存器（Debug Registers）：用于支持程序的调试过程。
+  描述符寄存器（Descriptor Registers）：在某些系统中，用于访问描述符表以进行内存管理和保护。
+  任务寄存器（Task Registers）：在某些操作系统中，用于支持多任务处理。
+  MSR寄存器（Model-Specific Registers）：特定于CPU型号的寄存器，用于控制特定的CPU特性和性能参数
+}
+
+
+
+TC397 CPU 通用寄存器
+{
+  A寄存器（A0-A3）：这些是通用地址寄存器，通常用于存储函数的参数和局部变量。它们在传递数据和执行程序时起到关键作用。
+  D寄存器（D0-D3）：这些是通用数据寄存器，专门用于传递浮点数参数。在进行浮点运算时，这些寄存器非常重要。
+  PC寄存器：程序计数器（PC）寄存器用于存储当前正在执行的指令的地址。
+  PSW寄存器：程序状态字（PSW）寄存器用于存储处理器的状态信息，如条件码、中断使能状态等。
+  PCXI寄存器：上下文信息（PCXI）寄存器用于在任务切换时保存和恢复上下文信息。
+  Upper context和Lower context：TriCore架构中的上下文分为Upper context和Lower context。Upper context由硬件自动存储，速度快；而Lower context需要手动维护
+}
+
+
+TC397 系统定时器 STM
+{
+  100MHZ = 1s 100,000,000 = 0.000,000,01s 
+  64位
+  计数1次10ns， 2^64 * 10ns = 5849年
+  每个STM模块可以产生两个SRx_INT中断信号（通过STM模块的Compare功能实现，下文介绍），Davinci OS中的硬件定时器就是使用STM模块的SRx_INT中断信号。
+  
+  STM作为Timer时，可以提供7个不同基准的Timer：
+  STM_TIM0: 基准为2^0 tick = 1 tick = 20 ns，也就是每20 ns，计数器加1.
+  STM_TIM1: 基准为2^4 tick = 16 tick = 320 ns，…
+  STM_TIM2: 基准为2^8 tick = 256 tick = 5120 ns = 5.120 us，…
+  STM_TIM3: 基准为2^12 tick = 4096 tick = 81920 ns = 81.92 us，…
+  STM_TIM4: 基准为2^16 tick = 65536 tick = 1310720 ns = 1.31072 ms，…
+  STM_TIM5: 基准为2^20 tick = 1048576 tick = 209715220 ns = 0. 20971522 s，…
+  STM_TIM6: 基准为2^32 tick = 4294967296 tick = 85899345920 ns = 85.899345920 s，…
+
+  Compare中断事件产生举例：
+  {
+    第1步：配置STMx_CMCON. MSTARTx位域，设置比较寄存器在STM中的起始位置。
+    第2步：配置STMx_CMCON.MSIZEx使用STM_CMPx的宽度（多少bit）。
+    第3步：配置STM_CMPx. CMPVAL[31:0]定时器值。
+    第4步：配置STM_ICR.CMPxOS到时触发STMIR0还是STMIR1中断。
+    第5步：配置STM_ICR.CMPxEN使能中断，等待定时中断触发。
+    中断触发后：在中断服务例程（ISR，中断服务函数）里设置STM_ISCR.CMPxIRR=1清除中断，并重复上述第5步操作重新使能中断，等待中断触发。
+  }
+  STM 的比较中断逻辑适合作为 EcuM 或者 Wdg 的定时中断，不适合作为 OS Counter 的触发源，会产生累积误差。如果要实现精准连续的定时功能，则需要使用该芯片的其他硬件模块，比如 GPT12、CCU6 以及来自于博世 IP 强大的 GTM 模块，
+  
+}
+
+Context Type
+{
+  /*! Minimal set of hardware registers to be able to suspend and resume a thread.
+   *
+   *  ### Implementation Hint ###
+   *  This data type typically holds the following information:
+   *  - Stack region
+   *  - Stack pointer
+   *  - Link register
+   *  - Machine status register
+   *  - Permanent registers
+   *
+   *  Some of this information may be automatically saved by hardware (on stack or some kind of dedicated saving area).
+   *  In this case you may need to save a pointer to this data, to be able to instruct the hardware to restore it later.
+   */
+  struct Os_Hal_ContextType_Tag
+  {
+    /*! The link register, from which the thread will be proceeded. */
+    uint32 Lr;
+
+    /*! The Pprs register */
+    uint32 Pprs;
+
+    /*! The (encoded) pointer to the previous context (CSA) including the following information:
+     *  permanent registers (stored in CSA pointed by this pointer),
+     *  stack pointer (stored in CSA pointed by this pointer),
+     *  PSW (stored in CSA pointed by this pointer),
+     *  interrupt status (encoded in this pointer),
+     *  interrupt level (encoded in this pointer). */
+    uint32 PreviousContextInfo;
+
+    /*! The (encoded) pointer to the reserved context (CSA). */
+    uint32 InitPCXI;
+    
+    /*! The (encoded) pointer to the running context during initialization (CSA). */
+    uint32 RunningPCXI;
+
+    /*! The lower address of the MPU region for stack. */
+    uint32 MpuRegionForStackLow;
+
+    /*! The upper address of the MPU region for stack. */
+    uint32 MpuRegionForStackUpper;
+
+    /*! The first pointer parameter. */
+    uint32 A4;
+  }Os_Hal_ContextType;
+}
+
+
+Thread Type
+{
+  struct Os_ThreadType_Tag
+  {
+    /*! List of occupied locks. */
+    Os_LockListType Locks;
+
+    /*! List of occupied spinlocks. */
+    Os_SpinlockListType Spinlocks;
+
+    /*! Occupied communication data element. */
+    P2CONST(Os_XSigComDataConfigType, TYPEDEF, OS_CONST) ComElement;
+
+    /*! The current application of this thread. */
+    P2CONST(Os_AppConfigType, TYPEDEF, OS_CONST) Application;
+
+    /*! Current memory protection settings. */
+    P2CONST(Os_MpAccessRightsType, TYPEDEF, OS_CONST) MpAccessRights;
+
+    /*! List of current service calls. */
+    P2VAR(Os_ServiceCallType, TYPEDEF, OS_VAR_NOINIT) ServiceCalls;
+
+    /*! Current call context. */
+    Os_CallContextType CallContext;
+  }Os_ThreadType;
+  
+  struct Os_ThreadConfigType_Tag
+  {
+    /*! Information needed to initialize the thread's context.
+     *  \trace SPEC-64065, SPEC-63973, SPEC-64007 */
+    P2CONST(Os_Hal_ContextConfigType, TYPEDEF, OS_CONST) ContextConfig;
+
+    /*! This structure holds the hardware context of the thread if it is suspended */
+    P2VAR(Os_Hal_ContextType, TYPEDEF, OS_VAR_NOINIT) Context;
+
+    /*! Associated stack. */
+    P2CONST(Os_StackConfigType, TYPEDEF, OS_CONST) Stack;
+
+    /*! The dynamic data of this thread. */
+    P2VAR(Os_ThreadType, TYPEDEF, OS_VAR_NOINIT) Dyn;
+
+    /*! The application to which this thread belongs. */
+    P2CONST(Os_AppConfigType, TYPEDEF, OS_CONST) OwnerApplication;
+
+    /*! The core to which this thread belongs. */
+    P2CONST(Os_CoreAsrConfigType, TYPEDEF, OS_CONST) Core;
+
+    /*! Current state of the interrupt API.
+     *  Internal comment removed.
+   *
+   * */
+    P2VAR(Os_IntApiStateType, TYPEDEF, OS_VAR_NOINIT) IntApiState;
+
+    /*! Configured timing protection settings for this thread.*/
+    P2CONST(Os_TpThreadConfigType, TYPEDEF, OS_CONST) TimeProtConfig;
+
+    /*! Configured memory protection settings for this thread. */
+    P2CONST(Os_MpAccessRightsType, TYPEDEF, OS_CONST) MpAccessRightsInitial;
+
+    /*! Pointer to an array of configured memory access rights. */
+    P2CONST(Os_AccessCheckConfigType, TYPEDEF, OS_CONST) AccessRights;
+
+    /*! Pointer to the configured trace data. */
+    P2CONST(Os_TraceThreadConfigType, TYPEDEF, OS_CONST) Trace;
+
+    /*! This structure holds the floating point unit context of the thread if it is supported,
+     *  may be NULL if FPU context is not needed. */
+    P2VAR(Os_Hal_ContextFpuContextType, TYPEDEF, OS_VAR_NOINIT) FpuContext;
+
+    /*! Initial call context. */
+    Os_CallContextType InitialCallContext;
+
+    /*! Hook to be called before Thread is started/resumed. May be NULL_PTR. */
+    Os_PreThreadHookCbkType PreThreadHook;
+
+    /*! Tells whether the thread is initialized during system startup or during runtime
+     *  when starting the thread. Value is defined by concrete thread class. */
+    boolean InitDuringStartUp;
+
+    /*! Tells whether the thread uses the floating point unit. */
+    boolean UsesFpu;
+  };
+}
+
+Task Type
+{
+  struct Os_TaskConfigType_Tag
+  {
+    /*! The thread attributes of this task.
+     * This attribute must come first! */
+    Os_ThreadConfigType Thread;
+
+    /*! The configured priority of a task. If a task is activated, it is scheduled at this priority. */
+    Os_TaskPrioType HomePriority;
+
+    /*! The ID for this task. */
+    TaskType TaskId;
+
+    /*! The priority which the task is running at, if it is scheduled.
+     *  It is used to implement internal resources and non-preemptive tasks. */
+    Os_TaskPrioType RunningPriority;
+
+    /*! The maximum number of multiple activation requests in parallel.
+     * Multiple activation is only allowed for basic tasks! */
+    Os_ActivationCntType MaxActivations;
+
+    /*! Application modes where the task shall be activated during OS initialization. */
+    AppModeType AutostartModes;
+
+    /*! Reference to applications which have an access to this object. */
+    Os_AppAccessMaskType AccessingApplications;
+
+    /*! Tells the number of round robin scheduling events until rescheduling takes place */
+    uint32 NumScheduleEventsRoundRobin;
+
+    /*! Tells whether the task participates in round robin scheduling with other tasks on the same priority */
+    boolean RoundRobinEnabled;
+
+    /*! Tells whether a task is extended (TRUE) or not (FALSE). */
+    boolean IsExtended;
+
+    /*! Tells whether the API function Schedule() may be called from the given task. */
+    Os_TaskScheduleType Reschedule;
+  };
+
+}
+
+Stack Type
+{
+  struct Os_StackConfigType_Tag
+  {
+    /*! First writable address. */
+    P2VAR(Os_Hal_StackType, TYPEDEF, OS_VAR_NOINIT) LowAddress;
+    /*! Last writable address. */
+    P2VAR(Os_Hal_StackType, TYPEDEF, OS_VAR_NOINIT) HighAddress;
+  }Os_StackConfigType;
+}
+
+Application Type
+{
+  APP实时数据
+  typedef struct
+  {
+    /*! Application state. */
+    ApplicationStateType State;
+  } Os_AppType;
+  
+  APP配置
+  /*! Constant application information. */
+  struct Os_AppConfigType_Tag
+  {
+    /*! Dynamic part. */
+    P2VAR(Os_AppType, TYPEDEF, OS_VAR_NOINIT) Dyn;
+
+    /*! The core to which this application belongs. */
+    P2CONST(Os_CoreAsrConfigType, TYPEDEF, OS_CONST) Core;
+
+    /*! Access rights bit mask. */
+    Os_AppMaskType AccessRightId;
+
+    /*! Tasks. */
+    P2CONST(Os_TaskConfigRefType, TYPEDEF, OS_CONST) TaskRefs;
+
+    /*! Number of tasks. */
+    Os_ObjIdxType TaskCount;
+
+    /*! ISRs of category 2. */
+    P2CONST(Os_IsrConfigRefType, TYPEDEF, OS_CONST) IsrCat2Refs;
+
+    /*! Number of ISRs of category 2. */
+    Os_ObjIdxType IsrCat2Count;
+
+    /*! ISRs of category 1. */
+    P2CONST(Os_IsrCat1ConfigRefType, TYPEDEF, OS_CONST) IsrCat1Refs;
+
+    /*! Number of ISRs of category 1. */
+    Os_ObjIdxType IsrCat1Count;
+
+    /*! Counters. */
+    P2CONST(Os_CounterConfigRefType, TYPEDEF, OS_CONST) CounterRefs;
+
+    /*! Number of counters. */
+    Os_ObjIdxType CounterCount;
+
+    /*! List of Alarm of this core. */
+    P2CONST(Os_AlarmConfigRefType, TYPEDEF, OS_CONST) AlarmRefs;
+
+    /*! Number of Alarms. */
+    Os_ObjIdxType AlarmCount;
+
+    /*! List of Schedule Tables of this core. */
+    P2CONST(Os_SchTConfigRefType, TYPEDEF, OS_CONST) SchTRefs;
+
+    /*! Number of Schedule Tables. */
+    Os_ObjIdxType SchTCount;
+
+    /*! List of Service Functions.
+     *  \trace      SPEC-63800 */
+    P2CONST(Os_ServiceConfigRefType, TYPEDEF, OS_CONST) ServiceFunctions;
+
+    /*! Number of Service Functions. */
+    Os_ObjIdxType ServiceFunctionCount;
+
+    /*! Application specific StartupHook. */
+    P2CONST(Os_HookCallbackConfigType, TYPEDEF, OS_CONST) StartupHookRef;
+
+    /*! Application specific ShutdownHook. */
+    P2CONST(Os_HookStatusHookConfigType, TYPEDEF, OS_CONST) ShutdownHookRef;
+
+    /*! Application specific ErrorHook. */
+    P2CONST(Os_HookStatusHookConfigType, TYPEDEF, OS_CONST) ErrorHookRef;
+
+    /*! List of all hooks of this application. */
+    P2CONST(Os_HookConfigRefType, TYPEDEF, OS_CONST) HookRefs;
+
+    /*! Number of hooks. */
+    Os_ObjIdxType HookCount;
+
+    /*! Link to the trace representation of the application. */
+    P2CONST(Os_TraceAppConfigType, TYPEDEF, OS_CONST) TraceAppl;
+
+    /*! Restart Task. */
+    P2CONST(Os_TaskConfigType, TYPEDEF, OS_CONST) RestartTask;
+
+    /*! Tells whether the application is trusted. */
+    boolean IsTrusted;
+
+    /*! Tells whether the application is privileged (MPU disabled) or not (MPU enabled). */
+    boolean IsPrivileged;
+
+    /*! Tells whether timing protection violation reporting is delayed until trusted functions are executed. */
+    boolean HasTimingProtectionDelay;
+
+    /*! Application ID. */
+    ApplicationType Id;
+  };
+}
+
+Core Type
+{
+  核配置信息
+  /*! Configuration information of a processor core. */
+  struct Os_CoreConfigType_Tag
+  {
+    /*! Dynamic status data (not cached). */
+    P2VAR(volatile Os_CoreStatusType, TYPEDEF, OS_VAR_ZERO_INIT) Status;
+
+    /*! HAL specific core configuration. */
+    P2CONST(Os_Hal_CoreConfigType, TYPEDEF, OS_CONST) HwConfig;
+
+    /*! List of core specific interrupt source objects. */
+    P2CONST(Os_InterruptSourceConfigRefType, TYPEDEF, OS_CONST) InterruptSourceRefs;
+
+    /*! Number of interrupt source objects. */
+    Os_ObjIdxType InterruptSourceCount;
+
+    /*! Logical core ID (tells also whether the core is the master core). */
+    CoreIdType Id;
+
+    /*! Trace information for this core */
+    P2VAR(Os_TraceCoreType, TYPEDEF, OS_VAR_NOINIT) Trace;
+
+    /*! Tells whether the core can be started as an AUTOSAR core. */
+    boolean IsAsrCore;
+
+    /*! Tells whether the core is auto-started after reset. */
+    boolean IsAutostart;
+
+    /*! Tells whether the core can start a master core. */
+    boolean IsMasterStartAllowed;
+
+    /*! Tells whether the core shall be used for system wide hardware initialization. */
+    boolean IsHardwareInitCore;
+  };
+  
+  核运行时需要的信息
+  struct Os_CoreAsrType_Tag
+  {
+    /*! Interrupt API state. */
+    Os_IntApiStateType IntApiState;
+
+    /*! Counter for interrupted threads. */
+    Os_CoreThreadIdx InterruptedThreadsCounter;
+
+    /*! Stack of currently interrupted threads. */
+    Os_CoreInterruptedThreadsType InterruptedThreads[OS_MAX_INTERRUPTEDTHREADS];
+
+    /*! Detailed information about the last error which has been detected. */
+    Os_ErrorType LastError;
+
+    /*! Interrupt source of the last interrupt, which occurred but is not handled by the OS. */
+    Os_InterruptSourceIdType LastUnhandledIrq;
+
+    /*! Unhandled interrupt reported since start up. */
+    Os_UnhandledEventReportType UnhandledIrqReported;
+
+    /*! Exception source of the last exception, which occurred but is not handled by the OS. */
+    Os_ExceptionSourceIdType LastUnhandledExc;
+
+    /*! Unhandled exception reported since start up. */
+    Os_UnhandledEventReportType UnhandledExcReported;
+
+    /*! The mode of the idle behavior. */
+    IdleModeType IdleMode;
+
+    /*! Tells which hook is currently executing. */
+    Os_HookInfoType HookInfo;
+
+    /*! The currently active stack configuration. */
+    Os_StackConfigRefType CurrentStack;
+  };
+
+  核内所有的元素及配置信息
+  /*! Configuration information of an AUTOSAR core.
+   * \extends Os_CoreConfigType */
+  struct Os_CoreAsrConfigType_Tag
+  {
+    /*! General core attributes. */
+    Os_CoreConfigType Core;
+
+    /*! The dynamic data of the core (may be cached). */
+    P2VAR(Os_CoreAsrType, TYPEDEF, OS_VAR_NOINIT) Dyn;
+
+    /*! Scheduler. */
+    P2CONST(Os_SchedulerConfigType, TYPEDEF, OS_CONST) Scheduler;
+
+    /*! Idle task. */
+    P2CONST(Os_TaskConfigType, TYPEDEF, OS_CONST) IdleTask;
+
+    /*! OS application of this core. */
+    P2CONST(Os_AppConfigType, TYPEDEF, OS_CONST) KernelApp;
+
+    /*! Kernel stack. */
+    P2CONST(Os_StackConfigType, TYPEDEF, OS_CONST) KernelStack;
+
+    /*! Pre-start task. */
+    P2CONST(Os_TaskConfigType, TYPEDEF, OS_CONST) PreStartTask;
+
+    /*! Pre-start task callback function . */
+    Os_TaskVoidTaskCbkType PreStartTaskCallback;
+
+    /*! System StartupHook. */
+    P2CONST(Os_HookCallbackConfigType, TYPEDEF, OS_CONST) StartupHookRef;
+
+    /*! System ShutdownHook. */
+    P2CONST(Os_HookStatusHookConfigType, TYPEDEF, OS_CONST) ShutdownHookRef;
+
+    /*! System ErrorHook. */
+    P2CONST(Os_HookStatusHookConfigType, TYPEDEF, OS_CONST) ErrorHookRef;
+
+    /*! System ProtectionHook. */
+    P2CONST(Os_HookProtectionHookConfigType, TYPEDEF, OS_CONST) ProtectionHookRef;
+
+    /*! System InitHook. */
+    P2CONST(Os_HookInitHookConfigType, TYPEDEF, OS_CONST) InitHookRef;
+
+    /*! List of hooks. */
+    P2CONST(Os_HookConfigRefType, TYPEDEF, OS_CONST) HookRefs;
+
+    /*! Number of hooks. */
+    Os_ObjIdxType HookCount;
+
+    /*! List of applications. */
+    P2CONST(Os_AppConfigRefType, TYPEDEF, OS_CONST) AppRefs;
+
+    /*! Number of applications. */
+    Os_ObjIdxType AppCount;
+
+    /*! List of resources. */
+    P2CONST(Os_ResourceConfigRefType, TYPEDEF, OS_CONST) ResourceRefs;
+
+    /*! Number of resources. */
+    Os_ObjIdxType ResourceCount;
+
+    /*! HAL specific core configuration. */
+    P2CONST(Os_Hal_CoreAsrConfigType, TYPEDEF, OS_CONST) HwConfig;
+
+    /*! Core memory protection configuration. */
+    P2CONST(Os_MpCoreConfigType, TYPEDEF, OS_CONST) MemoryProtection;
+
+    /*! Core timing protection configuration. */
+    P2CONST(Os_TpConfigType, TYPEDEF, OS_CONST) TimingProtection;
+
+    /*! List of stacks. */
+    P2CONST(Os_StackConfigRefType, TYPEDEF, OS_CONST) StackRefs;
+
+    /*! Number of stacks. */
+    Os_ObjIdxType StackCount;
+
+    /*! The unique index of each autosar core in range 0 to (NumAutosarCores-1). */
+    Os_CoreAsrCoreIdx CoreIdx;
+
+    /*! Cross Core communication. */
+    P2CONST(Os_XSigConfigType, TYPEDEF, OS_VAR_NOINIT) XSignal;
+
+    /*! List of core IOC configurations */
+    P2CONST(Os_IocConfigRefType, TYPEDEF, OS_CONST) IocRefs;
+
+    /*! Number of core IOC configurations */
+    Os_ObjIdxType IocCount;
+
+    /*! Synchronization of AUTOSAR cores. */
+    P2CONST(Os_BarrierBaseConfigType, TYPEDEF, OS_CONST) Barrier;
+
+    /*! List of configured barriers */
+    P2CONST(Os_BarrierBaseConfigRefType, TYPEDEF, OS_CONST) BarrierRefs;
+
+    /*! Number of configured barriers */
+    Os_ObjIdxType BarrierCount;
+
+    /*! Holds thread data shared between all threads of this core. */
+    P2VAR(Os_ThreadClassType, TYPEDEF, OS_VAR_NOINIT) ThreadClass;
+
+    /*! List of core ISR configurations */
+    P2CONST(Os_IsrConfigRefType, TYPEDEF, OS_CONST) IsrRefs;
+
+    /*! Number of core ISR configurations */
+    Os_ObjIdxType IsrCount;
+
+  };
+}
+
+System Type
+{
+  /*! Configuration information of an OS system. */
+  struct Os_SystemConfigType_Tag
+  {
+    /*! OS version information. */
+    Std_VersionInfoType VersionInfo;
+
+    /*! Number of configured AUTOSAR cores. */
+    Os_CoreAsrCoreIdx NumberOfAsrCores;
+
+    /*! List of spinlocks. */
+    P2CONST(Os_SpinlockConfigRefType, TYPEDEF, OS_CONST) SpinlockRefs;
+
+    /*! Number of spinlocks. */
+    Os_ObjIdxType SpinlockCount;
+
+    /*! HAL specific system configuration. */
+    P2CONST(Os_Hal_SystemConfigType, TYPEDEF, OS_CONST) HwConfig;
+
+    /*! System-wide memory protection configuration. */
+    P2CONST(Os_MpSystemConfigType, TYPEDEF, OS_CONST) MemoryProtection;
+
+    /*! List of core specific interrupt source objects. */
+    P2CONST(Os_InterruptSourceConfigRefType, TYPEDEF, OS_CONST) InterruptSourceRefs;
+
+    /*! Number of interrupt source objects. */
+    Os_ObjIdxType InterruptSourceCount;
+
+    /*! Hardware dependent data structure to get the current thread for a given core (NULL if not needed). */
+    P2CONST(Os_Hal_Core2ThreadConfigType, AUTOMATIC, OS_CONST) Core2Thread;
+  };
+}
+
+
+TC39X
+{
+  TC39x-B Specific Registers
+  {
+    CSFR
+    {
+      
+    }
+  }
+
+}
