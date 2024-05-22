@@ -1,3 +1,6 @@
+
+1. MCU 刷写
+
 MCU programm remark
 
 10pin-DAP connector
@@ -12,3 +15,113 @@ MCU programm remark
 user configuration block  
 UCB 512B * 48  erase max 100times all max 500times
 0xAF400000 - 0xAF405FFF 
+
+2.开发笔记
+软件详细设计-架构图，模块交互图，数据交互图，系统状态机，子系统状态机
+功能测试代码
+debug代码，debug记录
+error信息，error故障监控--触发式打印
+异步处--各模块仅操作各自行为，根据交互模块的状态执行对应行为
+提供测试人员查看信息的串口指令，可打印出必要信息
+
+3. 硬件方案
+
+ORIN-X芯片，总算力508Tops
+
+主SOC	ORIN-X *2
+LPDDR5	8GB *4*2 (位宽256bit *2)
+UFS3.1	256GB *2
+Safety MCU	TC397 *2
+千兆以太	1000Base-T1 *8
+百兆以太	100Base-T1 *6
+万兆以太	10GBase-T1 *2
+视频输入	GMSL2 *16
+视频输出	GMSL3 *1 + GMSL2 *2
+CAN/CAN-FD	19路
+LIN	4 路
+FlexRay	2 路
+DSI3	12路 (4通道DSI3总线)
+HSM	内置独立安全加密芯片
+高精度定位	内置GNSS + IMU
+
+
+MCUA支持9路CAN、6路SPI、1路Flexray、2路LIN、2路I2C、1路RGMII、5路UART
+MCUB支持10路CAN、5路SPI、1路Flexray、2路LIN、2路I2C、1路RGMII、3路UART
+
+环视相机数据不仅仅需要传递到SOCA/B，还需要通过MIPI to GMSL透传给DHU，环视解串器的配置需要支持SOCA/SOCB以及MCUA，为此环视解串器（Max96712）的1路I2C直接和SOCB连接，另外1路I2C需要通过单极双掷开关（SPDT Switch）实现MCUA和SOCA的选通访问，选通信号由MCUA控制。
+类似地，环视透传加串器（MAX96793）I2C也在MCUA和SOCA间选通访问，选通信号由MCUA控制
+哨兵模式camera
+环视解串器和加串器需要在SOCA/B进入低功耗状态时仍然保持数据链路运行，环视加解串器配置和管理增加MCUA 选项。
+环视摄像头* 4 将数据 通过解串器 Deser3(MAX96712)D-PHY 4Lanes --- 加串器(MAX96793)MIPI -> GMSL  --- GMSL DHU     
+
+4. gcc 编译
+预处理
+编译
+汇编
+链接
+
+gcc file.c -o file
+
+
+
+
+MCU 支持指令
+1. FLC Heater
+flc init status
+flc camera block
+
+
+IoExpPort_A74_P14
+
+thermal status
+thermal reset
+thermal setCoolT 55
+thermal setSocT 30
+thermal setMode 3
+thermal CoolTimeOut 0
+thermal SocTimeOut 0
+
+5. VMON梳理
+VMON通路：
+{
+  使用芯片监控
+  {
+    MPQ79500
+    上下电控制及时序监控，电压监控（过欠压）
+  }
+  芯片通讯方式：I2C
+  具体使用参数
+  监控方式
+  监控指标
+  {
+    79500自带的电压检控功能，实时读取电压值及故障
+  }
+  监控目的
+  {
+    监控SOC上电，下电时序故障
+    确保工作电压正常
+  }
+  监控步骤
+  {
+    VMON初始化
+    监控上电时序
+    监控电压 NIRQ
+    监控下电时序
+  }
+  
+  1. 初始化
+  2. 监控上电，下电时序forSOC
+  3. 连续监控VMON NIRQpin 指明是否 过欠压
+  4. 上报监控到的故障
+  
+  函数设计
+  {
+    返回值：通路状态
+    返回参数：数据
+  }
+}
+
+
+
+遗留问题:
+COM 层调用COMCBK 和 COMCBKTOUT 的机制及时机
