@@ -289,10 +289,18 @@ autosar os 知识点
               设置等待信号，等待其他核启动完成，第一个等待同步点
               else
               Os_Hal_CoreStart()
+              {
+                *((volatile uint32*)Core->ProgramCounterRegister) = (uint32)(Core->StartLabelAddress);                                /* PRQA S 0303 */ /* MD_Os_Hal_Rule11.4_0303 */ /* SBSW_OS_HAL_PWA_CORECONFIG_PC */
+
+                /* #20 Reset the core. */
+                *((volatile uint32*)Core->DBGSRRegister) = OS_HAL_DBGSR_START_CORE;                                                   /* PRQA S 0303 */ /* MD_Os_Hal_Rule11.4_0303 */ /* SBSW_OS_HAL_PWA_CORECONFIG_DBGSR */
+
+                /* #30 Release the core. */
+                *((volatile uint32*)Core->SYSCON_CORECON_Register) &= ~OS_HAL_SYSCON_BHALT_MASK; 
+              }
             }
           }
         }
-        每个核都完成核启动，并设置了等待信号 1次同步
         StartOS() 启动操作系统，操作系统位于多核之上，可操控所有核上运行的thread
         {
           Os_TrapCallStartOS()
@@ -305,19 +313,21 @@ autosar os 知识点
               Os_HookCallOs_CoreInitHook(hook) 
               {
                 hookthread = OsCfg_Hook_Os_CoreInitHook_OsCore0.hook.thread
-                将线程初始化一次，此处将Entry初始化到Lr
+                将线程初始化一次
                 Os_ThreadInit(hookthread)
                 {
+                  此处将Entry初始化到Lr
                   Os_Hal_ContextInit(contextconfig, context)
                   {
                     Os_Hal_ContextIntInitializeReserved(contextconfig, context)
+                    /* #40 Create the actual CSA */
                     Os_Hal_ContextIntInitialize(contextconfig, context)
                     {
                       Os_Hal_ContextIntPrepareCSAContent(contextconfig, context)
                       {
                         Context->PreviousContextInfo = Os_Hal_Mfcr(OS_HAL_PCXI_OFFSET);
                         Context->RunningPCXI = Os_Hal_Mfcr(OS_HAL_PCXI_OFFSET);
-                        Context->Lr = CurrentConfig->Entry;
+                        Context->Lr = CurrentConfig->Entry;//Enter赋值到Lr
                         Context->Pprs = CurrentConfig->ProtectionSet;  
                       }
                     }
@@ -421,17 +431,20 @@ autosar os 知识点
                   Os_AppHooksInit()
                 }
                 Os_XSigInit()
-                Os_BarrierAttachUserBarrier() 完成app初始化后
+              
               }
               
               start timing protection
-              Os_TpStart()
-              
+              Os_TpStart()时间保护
+              Os_BarrierSynchronizeInternal(core->Barrier);  第一次同步核 
+ 
               启动
               {
                 Os_HookCallCallback(StartupHookRef): system  startupHook
                 每个核启动startuphook
-                Os_HookCallCallback(StartupHookRef): app     startupHook
+                {
+                  Os_HookCallCallback(StartupHookRef): app     startupHook 
+                }
                 启动应用
                 Os_AppStart(KernelApp): Start kernel app
                 每个核启动应用
@@ -447,6 +460,7 @@ autosar os 知识点
           
           恢复上一个线程
           当前还在此钩子函数 OsCfg_Hook_Os_CoreInitHook_OsCore0
+          由于上一个线程还在Hook_Init中，已经将返回寄存器设置成Os_TrapHookReturn()函数，所以执行完上一个函数后，执行Os_TrapHookReturn函数
           Os_TrapHookReturn()
           {
             Os_HookReturn（）
@@ -762,7 +776,10 @@ CPU 寄存器
   MSR寄存器（Model-Specific Registers）：特定于CPU型号的寄存器，用于控制特定的CPU特性和性能参数
 }
 
+TC397 CPU寄存器
+{
 
+}
 
 TC397 CPU 通用寄存器
 {
