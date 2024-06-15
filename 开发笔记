@@ -1,0 +1,91 @@
+定时器
+{
+typedef struct
+{
+  boolean timer;
+  uint32 counter;
+  uint32 debounce;
+  boolean isReach;
+}s_TimerType;
+
+void Thermal_Runtime_StartTimer(s_TimerType *timer, uint32 debounce)
+{
+    if(timer != NULL_PTR)
+    {
+        if(!timer->timer)
+        {
+            timer->timer = TRUE;
+            Thermal_Runtime_GetGptTime(&timer->counter);
+            timer->debounce = timer->counter + debounce;
+            timer->isReach = FALSE;
+        }
+        else
+        {
+
+        }
+
+    }
+    else
+    {
+
+    }
+}
+void Thermal_Runtime_ResetTimer(s_TimerType *timer)
+{
+    if(timer != NULL_PTR)
+    {
+        timer->timer = FALSE;
+        timer->isReach = FALSE;
+        timer->counter = 0;
+        timer->debounce = 0;
+    }
+    else
+    {
+        
+    }
+}
+boolean Thermal_Runtime_IsTimerReach(s_TimerType *timer)
+{
+    if(timer != NULL_PTR)
+    {
+        if(timer->timer)
+        {
+            Thermal_Runtime_GetGptTime(&timer->counter);
+            if(timer->counter >= timer->debounce)
+            {
+                timer->isReach = TRUE;
+            }
+            else
+            {
+            
+            }
+        }
+    }
+    else
+    {
+        
+    }
+    return timer->isReach;
+}
+}
+
+更新判断
+{
+boolean Thermal_Runtime_IsUpdate(boolean value, boolean Judge)
+{
+    boolean ret;
+    if(value == Judge)
+    {
+        value = ~Judge;
+        ret = TRUE;
+        printf("is updated: %d \r\n",ret);
+    }
+    else
+    {
+        ret = FALSE;
+    }
+    return ret;
+}
+}
+
+
